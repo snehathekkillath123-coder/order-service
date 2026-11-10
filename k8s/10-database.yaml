@@ -1,0 +1,72 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: order-service-db-secret
+  namespace: foodapp
+type: Opaque
+stringData:
+  POSTGRES_DB: orderdb
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: postgres
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: order-service-db-pvc
+  namespace: foodapp
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-service-db
+  namespace: foodapp
+  labels: {app: order-service-db}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: {app: order-service-db}
+  template:
+    metadata:
+      labels: {app: order-service-db}
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          envFrom:
+            - secretRef:
+                name: order-service-db-secret
+          env:
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: order-service-db-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-service-db
+  namespace: foodapp
+spec:
+  selector: {app: order-service-db}
+  ports:
+    - port: 5432
+      targetPort: 5432
